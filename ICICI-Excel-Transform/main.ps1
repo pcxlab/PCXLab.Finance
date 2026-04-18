@@ -1,27 +1,34 @@
-Import-Module PCXLab.Core
-Import-Module PCXLab.Excel
+param(
+    [string]$InputFolder  = "C:\TEST",
+    [string]$OutputFolder = "C:\TEST\Output"
+)
 
-$config = Read-Config -Path ".\config.json"
+# Add module path (temporary for now)
+$env:PSModulePath += ";C:\Projects\Automation\Modules"
 
-Write-Log "Scanning folder..."
+Import-Module PCXLab.Excel -Force
 
-$files = Get-ICICIFiles -Path $config.InputFolder
+# Ensure output folder exists
+if (!(Test-Path $OutputFolder)) {
+    New-Item -ItemType Directory -Path $OutputFolder | Out-Null
+}
+
+$files = Get-ChildItem $InputFolder -Filter *.xls*
 
 foreach ($file in $files) {
 
-    try {
-        Write-Log "Processing $($file.Name)"
+    Write-Host "Processing: $($file.Name)" -ForegroundColor Cyan
 
+    try {
         $result = Convert-ICICIFormat -File $file
 
-        Export-Excel `
-            -Path (Join-Path $config.OutputFolder ($file.BaseName + "_Transformed.xlsx")) `
-            -InputObject $result `
-            -AutoSize -BoldTopRow
+        $outFile = Join-Path $OutputFolder ($file.BaseName + "_Transformed.xlsx")
 
-        Write-Log "Completed $($file.Name)" "SUCCESS"
+        $result | Export-Excel -Path $outFile -AutoSize -BoldTopRow
+
+        Write-Host "Saved: $outFile" -ForegroundColor Green
     }
     catch {
-        Write-Log $_.Exception.Message "ERROR"
+        Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
     }
 }
