@@ -14,16 +14,17 @@ $env:PSModulePath = "$modulePath;$env:PSModulePath"
 Import-Module PCXLab.Core -Force
 Import-Module PCXLab.Excel -Force
 
-Write-Log "Using PCXLab.Excel version: $((Get-Module PCXLab.Excel).Version)"
-Write-Log "Using PCXLab.Core version: $((Get-Module PCXLab.Core).Version)"
-
 # 🔹 Validate input folder
 if (-not (Test-Path $Folder)) {
     throw "Input folder does not exist: $Folder"
 }
 
-# 🔹 Start logging
+# 🔹 Start logging FIRST
 Start-LogSession -LogFolder (Join-Path $Folder "logs")
+
+# 🔹 Now logging is safe
+Write-Log "Using PCXLab.Excel version: $((Get-Module PCXLab.Excel).Version)"
+Write-Log "Using PCXLab.Core version: $((Get-Module PCXLab.Core).Version)"
 
 # 🔹 Environment check
 Test-PCXLabEnvironment -InputFolder $Folder -OutputFolder $OutputFolder
@@ -38,13 +39,11 @@ $files = Get-ChildItem $Folder -File
 
 foreach ($file in $files) {
 
-    # 🔹 Skip already processed files
     if ($file.Name -match "_ConvertedFromXls" -or $file.Name -match "_Transformed") {
         Write-Log "Skipping: $($file.Name)"
         continue
     }
 
-    # 🔹 Process only supported files
     if ($file.Extension -notin ".xls", ".xlsx") {
         Write-Log "Skipping unsupported file: $($file.Name)" "WARNING"
         continue
@@ -54,10 +53,8 @@ foreach ($file in $files) {
 
     try {
 
-        # 🔥 IMPORTANT → reset result
         $result = $null
 
-        # 🔹 Convert only if needed
         if ($file.Extension -eq ".xls") {
             $workingFile = Convert-XlsToXlsx -File $file
         }
@@ -65,13 +62,11 @@ foreach ($file in $files) {
             $workingFile = $file
         }
 
-        # 🔹 Detect bank (use original filename)
         $bank = Get-BankFromFile -File $file
 
         switch ($bank) {
 
             "ICICI" {
-
                 if ($file.Name -match "_DC_") {
                     $result = Convert-ICICIDCFormat -File $workingFile
                 }
@@ -81,7 +76,6 @@ foreach ($file in $files) {
             }
 
             "HDFC" {
-
                 if ($file.Name -match "_DC_") {
                     $result = Convert-HDFCDCFormat -File $workingFile
                 }
@@ -96,13 +90,11 @@ foreach ($file in $files) {
             }
         }
 
-        # 🔥 Safety check
         if (-not $result) {
             Write-Log "No result generated for $($file.Name)" "ERROR"
             continue
         }
 
-        # 🔹 Output filename
         $outFileName = Get-OutputFileName `
             -File $file `
             -Converted:$($file.Extension -eq ".xls") `
@@ -110,7 +102,6 @@ foreach ($file in $files) {
 
         $outFile = Join-Path $OutputFolder $outFileName
 
-        # 🔥 CRITICAL FIX → prevent 1E+22
         $result | Export-Excel `
             -Path $outFile `
             -AutoSize `
